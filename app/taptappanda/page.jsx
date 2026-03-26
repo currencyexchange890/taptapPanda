@@ -29,15 +29,15 @@ function getResourceImage(fileName) {
 
 function getRandomRewardPosition() {
   if (typeof window === "undefined") {
-    return { top: 96, left: 16 };
+    return { top: 112, left: 16 };
   }
 
-  const margin = 12;
-  const width = Math.min(360, window.innerWidth - margin * 2);
-  const height = Math.min(430, window.innerHeight - margin * 2);
+  const margin = 14;
+  const width = Math.min(288, window.innerWidth - margin * 2);
+  const height = Math.min(344, window.innerHeight - margin * 2);
 
   const maxLeft = Math.max(margin, window.innerWidth - width - margin);
-  const maxTop = Math.max(72, window.innerHeight - height - margin);
+  const maxTop = Math.max(84, window.innerHeight - height - margin);
 
   const left =
     maxLeft <= margin
@@ -45,9 +45,36 @@ function getRandomRewardPosition() {
       : margin + Math.random() * (maxLeft - margin);
 
   const top =
-    maxTop <= 72
-      ? Math.max(72, (window.innerHeight - height) / 2)
-      : 72 + Math.random() * (maxTop - 72);
+    maxTop <= 84
+      ? Math.max(84, (window.innerHeight - height) / 2)
+      : 84 + Math.random() * (maxTop - 84);
+
+  return {
+    top: Math.round(top),
+    left: Math.round(left),
+  };
+}
+
+function getRandomCollectButtonPosition() {
+  if (typeof window === "undefined") {
+    return { top: 120, left: 18 };
+  }
+
+  const margin = 18;
+  const buttonWidth = Math.min(240, window.innerWidth - margin * 2);
+  const buttonHeight = 48;
+  const maxLeft = Math.max(margin, window.innerWidth - buttonWidth - margin);
+  const maxTop = Math.max(84, window.innerHeight - buttonHeight - margin);
+
+  const left =
+    maxLeft <= margin
+      ? Math.max(margin, (window.innerWidth - buttonWidth) / 2)
+      : margin + Math.random() * (maxLeft - margin);
+
+  const top =
+    maxTop <= 84
+      ? Math.max(84, (window.innerHeight - buttonHeight) / 2)
+      : 84 + Math.random() * (maxTop - 84);
 
   return {
     top: Math.round(top),
@@ -70,7 +97,11 @@ export default function TapTapPandaPage() {
   const [session, setSession] = useState(null);
   const [reward, setReward] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [rewardPosition, setRewardPosition] = useState({ top: 96, left: 16 });
+  const [rewardPosition, setRewardPosition] = useState({ top: 112, left: 16 });
+  const [collectButtonPosition, setCollectButtonPosition] = useState({
+    top: 120,
+    left: 18,
+  });
   const [now, setNow] = useState(Date.now());
   const [liveTapCount, setLiveTapCount] = useState(0);
   const [liveCurrentTapInCycle, setLiveCurrentTapInCycle] = useState(0);
@@ -268,6 +299,7 @@ export default function TapTapPandaPage() {
 
       if (data?.reward) {
         setRewardPosition(getRandomRewardPosition());
+        setCollectButtonPosition(getRandomCollectButtonPosition());
         setReward(data.reward);
         setModalOpen(true);
       }
@@ -473,12 +505,6 @@ export default function TapTapPandaPage() {
       toast.error("Network error. Please try again.");
       setClaiming(false);
     }
-  };
-
-  const closeModal = () => {
-    if (claiming) return;
-    setModalOpen(false);
-    setReward(null);
   };
 
   const cycleProgress = Math.min(
@@ -710,10 +736,10 @@ export default function TapTapPandaPage() {
         {modalOpen && reward ? (
           <RewardModal
             reward={reward}
-            onClose={closeModal}
             onCollect={collectReward}
             claiming={claiming}
             position={rewardPosition}
+            buttonPosition={collectButtonPosition}
           />
         ) : null}
 
@@ -744,57 +770,45 @@ function Pop({ x, y, dx, dy, r, text }) {
   );
 }
 
-function RewardModal({ reward, onClose, onCollect, claiming, position }) {
+function RewardModal({
+  reward,
+  onCollect,
+  claiming,
+  position,
+  buttonPosition,
+}) {
   return (
     <div className="fixed inset-0 z-50">
-      <div
-        className="absolute inset-0 bg-black/70"
-        onClick={claiming ? undefined : onClose}
-      />
+      <div className="absolute inset-0 bg-black/70" />
 
       <div
-        className="fixed z-[51] w-[calc(100vw-24px)] max-w-[360px] overflow-hidden rounded-[18px] border border-white/12 bg-[#120816]/94 shadow-[0_28px_110px_rgba(0,0,0,.72)] backdrop-blur-xl"
+        className="fixed z-[51] w-[calc(100vw-28px)] max-w-[288px] overflow-hidden rounded-[16px] border border-white/12 bg-[#120816]/94 shadow-[0_28px_110px_rgba(0,0,0,.72)] backdrop-blur-xl"
         style={{
-          top: position?.top ?? 96,
-          left: position?.left ?? 12,
+          top: position?.top ?? 112,
+          left: position?.left ?? 14,
           animation: "modalIn 220ms ease-out both",
         }}
       >
-        <div className="absolute -right-24 -top-24 h-56 w-56 rounded-full bg-gradient-to-b from-[#ff3b57]/18 to-transparent blur-3xl" />
+        <div className="absolute -right-24 -top-24 h-52 w-52 rounded-full bg-gradient-to-b from-[#ff3b57]/18 to-transparent blur-3xl" />
 
-        <div className="relative flex items-center justify-between border-b border-white/10 px-4 py-4">
-          <div>
-            <div
-              className="text-[10px] text-white/55"
-              style={{ fontFamily: '"Fugaz One", system-ui' }}
-            >
-              REWARD
-            </div>
-            <div
-              className="mt-1 text-xl leading-none"
-              style={{ fontFamily: '"Fugaz One", system-ui' }}
-            >
-              {reward.resourceName}
-            </div>
-          </div>
-
-          <button
-            onClick={claiming ? undefined : onClose}
-            disabled={claiming}
-            className={[
-              "grid h-9 w-9 place-items-center rounded-[12px] border border-white/10 bg-white/5 transition",
-              claiming ? "cursor-not-allowed opacity-40" : "hover:bg-white/10",
-            ].join(" ")}
-            type="button"
-            aria-label="Close"
+        <div className="relative border-b border-white/10 px-4 py-3.5">
+          <div
+            className="text-[10px] text-white/55"
+            style={{ fontFamily: '"Fugaz One", system-ui' }}
           >
-            ✕
-          </button>
+            REWARD
+          </div>
+          <div
+            className="mt-1 text-[18px] leading-none"
+            style={{ fontFamily: '"Fugaz One", system-ui' }}
+          >
+            {reward.resourceName}
+          </div>
         </div>
 
-        <div className="grid place-items-center gap-4 px-4 py-5">
-          <div className="grid w-full place-items-center rounded-[16px] border border-white/10 bg-white/5 p-5">
-            <div className="relative h-[128px] w-[128px]">
+        <div className="grid place-items-center gap-3 px-4 py-4">
+          <div className="grid w-full place-items-center rounded-[14px] border border-white/10 bg-white/5 p-4">
+            <div className="relative h-[104px] w-[104px]">
               <Image
                 src={getResourceImage(reward.fileName)}
                 alt={reward.resourceName}
@@ -808,32 +822,43 @@ function RewardModal({ reward, onClose, onCollect, claiming, position }) {
             </div>
           </div>
 
-          <button
-            onClick={onCollect}
-            disabled={claiming}
-            className={[
-              "flex h-11 w-full items-center justify-center gap-2 rounded-[14px] bg-[linear-gradient(135deg,#ff3b57,#ff6b6b)] text-black shadow-[0_18px_45px_rgba(244,63,94,.22)] transition",
-              claiming
-                ? "cursor-not-allowed opacity-70"
-                : "hover:brightness-110 active:scale-[0.99]",
-            ].join(" ")}
-            type="button"
-            style={{ fontFamily: '"Fugaz One", system-ui' }}
-          >
-            {claiming ? (
-              <>
-                <span
-                  className="inline-block h-4 w-4 rounded-full border-2 border-black/30 border-t-black/80"
-                  style={{ animation: "spinSlow 700ms linear infinite" }}
-                />
-                <span>Processing...</span>
-              </>
-            ) : (
-              <>Collect {reward.resourceName}</>
-            )}
-          </button>
+          <p className="text-center text-[11px] leading-5 text-white/58">
+            Tap the collect button from anywhere on the screen to claim this
+            reward.
+          </p>
         </div>
       </div>
+
+      <button
+        onClick={onCollect}
+        disabled={claiming}
+        className={[
+          "fixed z-[52] flex h-12 min-w-[210px] items-center justify-center gap-2 rounded-[14px] px-5 bg-[linear-gradient(135deg,#ff3b57,#ff6b6b)] text-black shadow-[0_18px_45px_rgba(244,63,94,.22)] transition",
+          claiming
+            ? "cursor-not-allowed opacity-70"
+            : "hover:brightness-110 active:scale-[0.99]",
+        ].join(" ")}
+        type="button"
+        style={{
+          top: buttonPosition?.top ?? 120,
+          left: buttonPosition?.left ?? 18,
+          width: "min(240px, calc(100vw - 36px))",
+          fontFamily: '"Fugaz One", system-ui',
+          animation: "modalIn 240ms ease-out both",
+        }}
+      >
+        {claiming ? (
+          <>
+            <span
+              className="inline-block h-4 w-4 rounded-full border-2 border-black/30 border-t-black/80"
+              style={{ animation: "spinSlow 700ms linear infinite" }}
+            />
+            <span>Processing...</span>
+          </>
+        ) : (
+          <>Collect {reward.resourceName}</>
+        )}
+      </button>
     </div>
   );
 }
