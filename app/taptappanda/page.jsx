@@ -27,6 +27,22 @@ function getResourceImage(fileName) {
   return `/image/${encodeURIComponent(fileName)}`;
 }
 
+function resolveUpcomingRewardPreview(data) {
+  return (
+    data?.nextReward ||
+    data?.rewardPreview ||
+    data?.activity?.nextReward ||
+    data?.activity?.rewardPreview ||
+    null
+  );
+}
+
+function preloadRewardImage(fileName) {
+  if (typeof window === "undefined" || !fileName) return;
+  const image = new window.Image();
+  image.src = getResourceImage(fileName);
+}
+
 function getRandomRewardPosition() {
   if (typeof window === "undefined") {
     return { top: 112, left: 16 };
@@ -69,6 +85,11 @@ export default function TapTapPandaPage() {
   const [reward, setReward] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [rewardPosition, setRewardPosition] = useState({ top: 112, left: 16 });
+  const [preparedRewardPosition, setPreparedRewardPosition] = useState({
+    top: 112,
+    left: 16,
+  });
+  const [preparedRewardPreview, setPreparedRewardPreview] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [liveTapCount, setLiveTapCount] = useState(0);
   const [liveCurrentTapInCycle, setLiveCurrentTapInCycle] = useState(0);
@@ -84,6 +105,7 @@ export default function TapTapPandaPage() {
     setNextSyncTap(
       Number(data?.activity?.nextSyncTap || data?.activity?.tapsPerCycle || 1),
     );
+    setPreparedRewardPreview(resolveUpcomingRewardPreview(data));
     setHasPendingSync(false);
   };
 
@@ -109,16 +131,54 @@ export default function TapTapPandaPage() {
           prev?.activity?.nextSyncTap ??
           prev?.activity?.tapsPerCycle,
       },
+      nextReward:
+        data?.nextReward ??
+        data?.rewardPreview ??
+        data?.activity?.nextReward ??
+        data?.activity?.rewardPreview ??
+        prev?.nextReward,
     }));
 
     setLiveTapCount(Number(data?.tapCount || 0));
     setLiveCurrentTapInCycle(Number(data?.currentTapInCycle || 0));
     setLiveCurrentCycle(Number(data?.currentCycle || 1));
     setNextSyncTap(Number(data?.nextSyncTap || data?.tapsPerCycle || 1));
+    setPreparedRewardPreview(resolveUpcomingRewardPreview(data));
     setHasPendingSync(false);
   };
 
-  const loadSession = async ({ silent = false } = {}) => {
+  useEffect(() => {
+    setPreparedRewardPosition(getRandomRewardPosition());
+    loadSession();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!preparedRewardPreview?.fileName) return;
+    preloadRewardImage(preparedRewardPreview.fileName);
+  }, [preparedRewardPreview?.fileName]);
+
+  const expireAtMs = new Date(session?.account?.expireAt || 0).getTime();
+  const coolDownUntilMs = new Date(
+    session?.activity?.coolDownUntil || 0,
+  ).getTime();
+
+  const remainingValidity =
+    expireAtMs && expireAtMs > now
+      ? formatDuration(expireAtMs - now)
+      : "00:00:00";
+
+  const remainingCooldownMs =
+    coolDownUntilMs && coolDownUntilMs > now ? coolDownUntilMs - now : 0;
+
+  const remainingCooldown =
+    remainingCooldownMs > 0 ? formatDuration(remainingCooldownMs) : null;
+
+  async function loadSession({ silent = false } = {}) {
     try {
       if (!silent) setLoading(true);
 
@@ -147,32 +207,7 @@ export default function TapTapPandaPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadSession();
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const expireAtMs = new Date(session?.account?.expireAt || 0).getTime();
-  const coolDownUntilMs = new Date(
-    session?.activity?.coolDownUntil || 0,
-  ).getTime();
-
-  const remainingValidity =
-    expireAtMs && expireAtMs > now
-      ? formatDuration(expireAtMs - now)
-      : "00:00:00";
-
-  const remainingCooldownMs =
-    coolDownUntilMs && coolDownUntilMs > now ? coolDownUntilMs - now : 0;
-
-  const remainingCooldown =
-    remainingCooldownMs > 0 ? formatDuration(remainingCooldownMs) : null;
+  }
 
   useEffect(() => {
     if (!remainingCooldownMs) {
@@ -265,7 +300,9 @@ export default function TapTapPandaPage() {
       applyTapResponse(data);
 
       if (data?.reward) {
-        setRewardPosition(getRandomRewardPosition());
+        preloadRewardImage(data.reward?.fileName);
+        setRewardPosition(preparedRewardPosition);
+        setPreparedRewardPosition(getRandomRewardPosition());
         setReward(data.reward);
         setModalOpen(true);
       }
@@ -466,6 +503,7 @@ export default function TapTapPandaPage() {
       setModalOpen(false);
       setReward(null);
       setClaiming(false);
+      setPreparedRewardPosition(getRandomRewardPosition());
       await loadSession({ silent: true });
     } catch {
       toast.error("Network error. Please try again.");
@@ -685,7 +723,8 @@ export default function TapTapPandaPage() {
               <div className="mb-2 flex items-center justify-between gap-3 text-xs sm:text-sm">
                 <span className="font-medium text-white/72">Tap Progress</span>
                 <span className="font-semibold tabular-nums text-white/88">
-                  {formatNumber(cycleProgress)} / {formatNumber(tapsPerCycle)} taps
+                  {formatNumber(cycleProgress)} / {formatNumber(tapsPerCycle)}{" "}
+                  taps
                 </span>
               </div>
 
@@ -745,7 +784,7 @@ function RewardModal({ reward, onCollect, claiming, position }) {
         style={{
           top: position?.top ?? 112,
           left: position?.left ?? 14,
-          animation: "modalIn 220ms ease-out both",
+          animation: "modalIn 140ms ease-out both",
         }}
       >
         <div className="absolute -right-24 -top-24 h-52 w-52 rounded-full bg-gradient-to-b from-[#ff3b57]/18 to-transparent blur-3xl" />
