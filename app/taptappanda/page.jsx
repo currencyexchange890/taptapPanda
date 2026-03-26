@@ -33,47 +33,18 @@ function getRandomRewardPosition() {
   }
 
   const margin = 14;
-  const width = Math.min(288, window.innerWidth - margin * 2);
-  const height = Math.min(344, window.innerHeight - margin * 2);
-
-  const maxLeft = Math.max(margin, window.innerWidth - width - margin);
-  const maxTop = Math.max(84, window.innerHeight - height - margin);
+  const size = Math.min(258, window.innerWidth - margin * 2);
+  const maxLeft = Math.max(margin, window.innerWidth - size - margin);
+  const maxTop = Math.max(84, window.innerHeight - size - margin);
 
   const left =
     maxLeft <= margin
-      ? Math.max(margin, (window.innerWidth - width) / 2)
+      ? Math.max(margin, (window.innerWidth - size) / 2)
       : margin + Math.random() * (maxLeft - margin);
 
   const top =
     maxTop <= 84
-      ? Math.max(84, (window.innerHeight - height) / 2)
-      : 84 + Math.random() * (maxTop - 84);
-
-  return {
-    top: Math.round(top),
-    left: Math.round(left),
-  };
-}
-
-function getRandomCollectButtonPosition() {
-  if (typeof window === "undefined") {
-    return { top: 120, left: 18 };
-  }
-
-  const margin = 18;
-  const buttonWidth = Math.min(240, window.innerWidth - margin * 2);
-  const buttonHeight = 48;
-  const maxLeft = Math.max(margin, window.innerWidth - buttonWidth - margin);
-  const maxTop = Math.max(84, window.innerHeight - buttonHeight - margin);
-
-  const left =
-    maxLeft <= margin
-      ? Math.max(margin, (window.innerWidth - buttonWidth) / 2)
-      : margin + Math.random() * (maxLeft - margin);
-
-  const top =
-    maxTop <= 84
-      ? Math.max(84, (window.innerHeight - buttonHeight) / 2)
+      ? Math.max(84, (window.innerHeight - size) / 2)
       : 84 + Math.random() * (maxTop - 84);
 
   return {
@@ -98,10 +69,6 @@ export default function TapTapPandaPage() {
   const [reward, setReward] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [rewardPosition, setRewardPosition] = useState({ top: 112, left: 16 });
-  const [collectButtonPosition, setCollectButtonPosition] = useState({
-    top: 120,
-    left: 18,
-  });
   const [now, setNow] = useState(Date.now());
   const [liveTapCount, setLiveTapCount] = useState(0);
   const [liveCurrentTapInCycle, setLiveCurrentTapInCycle] = useState(0);
@@ -299,7 +266,6 @@ export default function TapTapPandaPage() {
 
       if (data?.reward) {
         setRewardPosition(getRandomRewardPosition());
-        setCollectButtonPosition(getRandomCollectButtonPosition());
         setReward(data.reward);
         setModalOpen(true);
       }
@@ -739,7 +705,6 @@ export default function TapTapPandaPage() {
             onCollect={collectReward}
             claiming={claiming}
             position={rewardPosition}
-            buttonPosition={collectButtonPosition}
           />
         ) : null}
 
@@ -770,19 +735,13 @@ function Pop({ x, y, dx, dy, r, text }) {
   );
 }
 
-function RewardModal({
-  reward,
-  onCollect,
-  claiming,
-  position,
-  buttonPosition,
-}) {
+function RewardModal({ reward, onCollect, claiming, position }) {
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/70" />
 
       <div
-        className="fixed z-[51] w-[calc(100vw-28px)] max-w-[288px] overflow-hidden rounded-[16px] border border-white/12 bg-[#120816]/94 shadow-[0_28px_110px_rgba(0,0,0,.72)] backdrop-blur-xl"
+        className="fixed z-[51] w-[calc(100vw-28px)] max-w-[258px] aspect-square overflow-hidden rounded-[16px] border border-white/12 bg-[#120816]/94 shadow-[0_28px_110px_rgba(0,0,0,.72)] backdrop-blur-xl"
         style={{
           top: position?.top ?? 112,
           left: position?.left ?? 14,
@@ -791,74 +750,66 @@ function RewardModal({
       >
         <div className="absolute -right-24 -top-24 h-52 w-52 rounded-full bg-gradient-to-b from-[#ff3b57]/18 to-transparent blur-3xl" />
 
-        <div className="relative border-b border-white/10 px-4 py-3.5">
-          <div
-            className="text-[10px] text-white/55"
-            style={{ fontFamily: '"Fugaz One", system-ui' }}
-          >
-            REWARD
-          </div>
-          <div
-            className="mt-1 text-[18px] leading-none"
-            style={{ fontFamily: '"Fugaz One", system-ui' }}
-          >
-            {reward.resourceName}
-          </div>
-        </div>
-
-        <div className="grid place-items-center gap-3 px-4 py-4">
-          <div className="grid w-full place-items-center rounded-[14px] border border-white/10 bg-white/5 p-4">
-            <div className="relative h-[104px] w-[104px]">
-              <Image
-                src={getResourceImage(reward.fileName)}
-                alt={reward.resourceName}
-                fill
-                className="object-contain drop-shadow-[0_24px_60px_rgba(0,0,0,.55)]"
-                priority
-              />
+        <div className="relative flex h-full flex-col p-3">
+          <div className="border-b border-white/10 pb-2">
+            <div
+              className="text-[10px] text-white/55"
+              style={{ fontFamily: '"Fugaz One", system-ui' }}
+            >
+              REWARD
             </div>
-            <div className="mt-3 text-sm text-white/72">
-              Quantity: {reward.quantity}
+            <div
+              className="mt-1 text-[16px] leading-none"
+              style={{ fontFamily: '"Fugaz One", system-ui' }}
+            >
+              {reward.resourceName}
             </div>
           </div>
 
-          <p className="text-center text-[11px] leading-5 text-white/58">
-            Tap the collect button from anywhere on the screen to claim this
-            reward.
-          </p>
+          <div className="flex flex-1 flex-col items-center justify-center">
+            <div className="grid w-full place-items-center rounded-[14px] border border-white/10 bg-white/5 px-3 py-3">
+              <div className="relative h-[92px] w-[92px]">
+                <Image
+                  src={getResourceImage(reward.fileName)}
+                  alt={reward.resourceName}
+                  fill
+                  className="object-contain drop-shadow-[0_24px_60px_rgba(0,0,0,.55)]"
+                  priority
+                />
+              </div>
+
+              <div className="mt-2 text-xs text-white/72">
+                Quantity: {reward.quantity}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={onCollect}
+            disabled={claiming}
+            className={[
+              "mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-[12px] bg-[linear-gradient(135deg,#ff3b57,#ff6b6b)] px-4 text-black shadow-[0_18px_45px_rgba(244,63,94,.22)] transition",
+              claiming
+                ? "cursor-not-allowed opacity-70"
+                : "hover:brightness-110 active:scale-[0.99]",
+            ].join(" ")}
+            type="button"
+            style={{ fontFamily: '"Fugaz One", system-ui' }}
+          >
+            {claiming ? (
+              <>
+                <span
+                  className="inline-block h-4 w-4 rounded-full border-2 border-black/30 border-t-black/80"
+                  style={{ animation: "spinSlow 700ms linear infinite" }}
+                />
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>Collect</>
+            )}
+          </button>
         </div>
       </div>
-
-      <button
-        onClick={onCollect}
-        disabled={claiming}
-        className={[
-          "fixed z-[52] flex h-12 min-w-[210px] items-center justify-center gap-2 rounded-[14px] px-5 bg-[linear-gradient(135deg,#ff3b57,#ff6b6b)] text-black shadow-[0_18px_45px_rgba(244,63,94,.22)] transition",
-          claiming
-            ? "cursor-not-allowed opacity-70"
-            : "hover:brightness-110 active:scale-[0.99]",
-        ].join(" ")}
-        type="button"
-        style={{
-          top: buttonPosition?.top ?? 120,
-          left: buttonPosition?.left ?? 18,
-          width: "min(240px, calc(100vw - 36px))",
-          fontFamily: '"Fugaz One", system-ui',
-          animation: "modalIn 240ms ease-out both",
-        }}
-      >
-        {claiming ? (
-          <>
-            <span
-              className="inline-block h-4 w-4 rounded-full border-2 border-black/30 border-t-black/80"
-              style={{ animation: "spinSlow 700ms linear infinite" }}
-            />
-            <span>Processing...</span>
-          </>
-        ) : (
-          <>Collect {reward.resourceName}</>
-        )}
-      </button>
     </div>
   );
 }
