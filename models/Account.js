@@ -2,8 +2,14 @@ import mongoose from "mongoose"
 
 const AccountResourceSchema = new mongoose.Schema(
   {
+    resourceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Resource",
+      default: null,
+    },
     resourceName: { type: String, required: true, trim: true },
     fileName: { type: String, default: "", trim: true },
+    imageUrl: { type: String, default: "", trim: true },
     quantity: { type: Number, required: true, min: 0 },
     claimedQuantity: { type: Number, default: 0, min: 0 },
   },
@@ -22,8 +28,14 @@ const AccountActivityDropSchema = new mongoose.Schema(
   {
     cycleNumber: { type: Number, required: true, min: 1 },
     tapNumber: { type: Number, required: true, min: 1 },
+    resourceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Resource",
+      default: null,
+    },
     resourceName: { type: String, required: true, trim: true },
     fileName: { type: String, default: "", trim: true },
+    imageUrl: { type: String, default: "", trim: true },
     quantity: { type: Number, default: 1, min: 1 },
     claim: { type: Boolean, default: false },
     claimedAt: { type: Date, default: null },

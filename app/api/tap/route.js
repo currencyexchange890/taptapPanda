@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
+import { NextResponse } from "next/server"
+import dbConnect from "@/lib/dbConnect"
 import {
   buildAuthErrorResponse,
   getAuthenticatedAccount,
   getTapSyncMeta,
   syncAccountProgress,
-} from "@/lib/accountAuth";
+} from "@/lib/accountAuth"
+import { serializeResourceItem } from "@/lib/resourcePayload"
 
 function buildTapPayload(account, reward = null, extra = {}) {
-  const progress = account.activity?.progress || {};
-  const meta = getTapSyncMeta(account);
+  const progress = account.activity?.progress || {}
+  const meta = getTapSyncMeta(account)
 
   return {
     message: reward ? "Reward unlocked." : "Tap synced.",
@@ -28,35 +29,35 @@ function buildTapPayload(account, reward = null, extra = {}) {
     nextSyncTap: meta.nextSyncTap,
     reward,
     ...extra,
-  };
+  }
 }
 
 export async function POST(req) {
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({}))
 
-    await dbConnect();
+    await dbConnect()
 
     const auth = await getAuthenticatedAccount(
       req,
       "clickCount expireAt status activity",
-    );
+    )
 
     if (!auth.ok) {
-      return buildAuthErrorResponse(auth);
+      return buildAuthErrorResponse(auth)
     }
 
-    const account = auth.account;
-    const sync = syncAccountProgress(account);
+    const account = auth.account
+    const sync = syncAccountProgress(account)
 
     if (sync.changed) {
-      await account.save();
+      await account.save()
     }
 
-    const progress = account.activity?.progress || {};
+    const progress = account.activity?.progress || {}
     const coolDownUntil = progress.coolDownUntil
       ? new Date(progress.coolDownUntil)
-      : null;
+      : null
 
     if (coolDownUntil && coolDownUntil.getTime() > Date.now()) {
       return NextResponse.json(
@@ -66,7 +67,7 @@ export async function POST(req) {
           ...buildTapPayload(account),
         },
         { status: 429 },
-      );
+      )
     }
 
     if (sync.completed) {
@@ -76,20 +77,20 @@ export async function POST(req) {
           ...buildTapPayload(account),
         },
         { status: 403 },
-      );
+      )
     }
 
-    const tapsPerCycle = Math.max(1, Number(account.activity?.tapsPerCycle || 1));
+    const tapsPerCycle = Math.max(1, Number(account.activity?.tapsPerCycle || 1))
     const coolDownMinutes = Math.max(
       1,
       Number(account.activity?.coolDownMinutes || 30),
-    );
+    )
 
-    const currentCycle = Number(progress.currentCycle || 1);
-    const savedTap = Number(progress.currentTapInCycle || 0);
+    const currentCycle = Number(progress.currentCycle || 1)
+    const savedTap = Number(progress.currentTapInCycle || 0)
 
-    const requestedCycle = Number(body?.currentCycle);
-    const requestedTargetTap = Number(body?.targetTapInCycle);
+    const requestedCycle = Number(body?.currentCycle)
+    const requestedTargetTap = Number(body?.targetTapInCycle)
 
     if (
       Number.isFinite(requestedCycle) &&
@@ -102,7 +103,7 @@ export async function POST(req) {
           resync: true,
         }),
         { status: 200 },
-      );
+      )
     }
 
     if (!Number.isFinite(requestedTargetTap) || requestedTargetTap <= savedTap) {
@@ -111,49 +112,47 @@ export async function POST(req) {
           message: "Nothing to sync.",
         }),
         { status: 200 },
-      );
+      )
     }
 
     const requestedClampedTap = Math.min(
       tapsPerCycle,
       Math.max(savedTap, Math.floor(requestedTargetTap)),
-    );
+    )
 
     if (requestedClampedTap <= savedTap) {
-      return NextResponse.json(buildTapPayload(account), { status: 200 });
+      return NextResponse.json(buildTapPayload(account), { status: 200 })
     }
 
-    let reward = null;
-    let effectiveTargetTap = requestedClampedTap;
+    let reward = null
+    let effectiveTargetTap = requestedClampedTap
 
     const timeline = Array.isArray(account.activity?.timeline)
       ? account.activity.timeline
-      : [];
+      : []
 
     for (const item of timeline) {
-      const itemCycle = Number(item?.cycleNumber || 0);
-      const itemTap = Number(item?.tapNumber || 0);
+      const itemCycle = Number(item?.cycleNumber || 0)
+      const itemTap = Number(item?.tapNumber || 0)
 
-      if (itemCycle !== currentCycle) continue;
-      if (item?.claim) continue;
-      if (itemTap <= savedTap) continue;
-      if (itemTap > requestedClampedTap) continue;
+      if (itemCycle !== currentCycle) continue
+      if (item?.claim) continue
+      if (itemTap <= savedTap) continue
+      if (itemTap > requestedClampedTap) continue
 
-      reward = {
+      reward = serializeResourceItem(item, {
         cycleNumber: itemCycle,
         tapNumber: itemTap,
-        resourceName: item.resourceName,
-        fileName: item.fileName || "",
         quantity: Number(item.quantity || 1),
-      };
-      effectiveTargetTap = itemTap;
-      break;
+      })
+      effectiveTargetTap = itemTap
+      break
     }
 
-    const delta = effectiveTargetTap - savedTap;
+    const delta = effectiveTargetTap - savedTap
 
-    account.clickCount = Number(account.clickCount || 0) + delta;
-    account.activity.progress.currentTapInCycle = effectiveTargetTap;
+    account.clickCount = Number(account.clickCount || 0) + delta
+    account.activity.progress.currentTapInCycle = effectiveTargetTap
 
     if (
       effectiveTargetTap >= tapsPerCycle &&
@@ -161,18 +160,18 @@ export async function POST(req) {
     ) {
       account.activity.progress.coolDownUntil = new Date(
         Date.now() + coolDownMinutes * 60 * 1000,
-      );
+      )
     } else if (effectiveTargetTap >= tapsPerCycle) {
-      account.activity.progress.coolDownUntil = null;
+      account.activity.progress.coolDownUntil = null
     }
 
-    await account.save();
+    await account.save()
 
-    return NextResponse.json(buildTapPayload(account, reward), { status: 200 });
+    return NextResponse.json(buildTapPayload(account, reward), { status: 200 })
   } catch {
     return NextResponse.json(
       { message: "Internal server error." },
       { status: 500 },
-    );
+    )
   }
 }

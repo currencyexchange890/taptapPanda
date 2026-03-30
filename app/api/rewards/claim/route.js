@@ -6,6 +6,7 @@ import {
   getAuthenticatedAccount,
   syncAccountProgress,
 } from "@/lib/accountAuth"
+import { getResourceKey, serializeResourceItem } from "@/lib/resourcePayload"
 
 export async function POST(req) {
   try {
@@ -76,16 +77,34 @@ export async function POST(req) {
     account.activity.progress.claimedDrops =
       Number(account.activity?.progress?.claimedDrops || 0) + 1
 
+    const dropKey = getResourceKey(drop)
+    const dropNameKey = drop?.resourceName
+      ? `name:${String(drop.resourceName).trim().toLowerCase()}`
+      : ""
+
     const resourceIndex = Array.isArray(account.resources)
-      ? account.resources.findIndex(
-          (item) => item.resourceName === drop.resourceName
-        )
+      ? account.resources.findIndex((item) => {
+          const itemKey = getResourceKey(item)
+          if (dropKey && itemKey === dropKey) return true
+          if (dropNameKey && item?.resourceName) {
+            return `name:${String(item.resourceName).trim().toLowerCase()}` === dropNameKey
+          }
+          return false
+        })
       : -1
 
     if (resourceIndex >= 0) {
       account.resources[resourceIndex].claimedQuantity =
         Number(account.resources[resourceIndex].claimedQuantity || 0) +
         Number(drop.quantity || 1)
+
+      if (!account.resources[resourceIndex].imageUrl && drop.imageUrl) {
+        account.resources[resourceIndex].imageUrl = drop.imageUrl
+      }
+
+      if (!account.resources[resourceIndex].fileName && drop.fileName) {
+        account.resources[resourceIndex].fileName = drop.fileName
+      }
     }
 
     await account.save()
@@ -100,9 +119,14 @@ export async function POST(req) {
     }
 
     const myResourceIndex = Array.isArray(myResourceDoc.resources)
-      ? myResourceDoc.resources.findIndex(
-          (item) => item.name === drop.resourceName
-        )
+      ? myResourceDoc.resources.findIndex((item) => {
+          const itemKey = getResourceKey(item)
+          if (dropKey && itemKey === dropKey) return true
+          if (dropNameKey && item?.name) {
+            return `name:${String(item.name).trim().toLowerCase()}` === dropNameKey
+          }
+          return false
+        })
       : -1
 
     if (myResourceIndex >= 0) {
@@ -110,13 +134,23 @@ export async function POST(req) {
         Number(myResourceDoc.resources[myResourceIndex].stock || 0) +
         Number(drop.quantity || 1)
 
+      if (!myResourceDoc.resources[myResourceIndex].resourceId && drop.resourceId) {
+        myResourceDoc.resources[myResourceIndex].resourceId = drop.resourceId
+      }
+
+      if (!myResourceDoc.resources[myResourceIndex].imageUrl && drop.imageUrl) {
+        myResourceDoc.resources[myResourceIndex].imageUrl = drop.imageUrl
+      }
+
       if (!myResourceDoc.resources[myResourceIndex].fileName && drop.fileName) {
         myResourceDoc.resources[myResourceIndex].fileName = drop.fileName
       }
     } else {
       myResourceDoc.resources.push({
+        resourceId: drop.resourceId || null,
         name: drop.resourceName,
         fileName: drop.fileName || "",
+        imageUrl: drop.imageUrl || "",
         stock: Number(drop.quantity || 1),
       })
     }
@@ -126,13 +160,11 @@ export async function POST(req) {
     return NextResponse.json(
       {
         message: `${drop.resourceName} collected successfully.`,
-        reward: {
+        reward: serializeResourceItem(drop, {
           cycleNumber: Number(drop.cycleNumber || 0),
           tapNumber: Number(drop.tapNumber || 0),
-          resourceName: drop.resourceName,
-          fileName: drop.fileName || "",
           quantity: Number(drop.quantity || 1),
-        },
+        }),
       },
       { status: 200 }
     )

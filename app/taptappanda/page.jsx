@@ -22,8 +22,24 @@ function formatDuration(ms) {
   )}:${String(seconds).padStart(2, "0")}`;
 }
 
-function getResourceImage(fileName) {
+function isRemoteImage(src) {
+  return typeof src === "string" && /^https?:\/\//i.test(src.trim());
+}
+
+function getResourceImage(resource) {
+  const imageUrl =
+    typeof resource === "string"
+      ? resource
+      : String(resource?.imageUrl || "").trim();
+
+  if (imageUrl) return imageUrl;
+
+  const fileName =
+    typeof resource === "string" ? "" : String(resource?.fileName || "").trim();
+
   if (!fileName) return "/assets/images/silver.png";
+  if (/^https?:\/\//i.test(fileName)) return fileName;
+
   return `/image/${encodeURIComponent(fileName)}`;
 }
 
@@ -37,10 +53,12 @@ function resolveUpcomingRewardPreview(data) {
   );
 }
 
-function preloadRewardImage(fileName) {
-  if (typeof window === "undefined" || !fileName) return;
+function preloadRewardImage(resource) {
+  if (typeof window === "undefined") return;
+  const src = getResourceImage(resource);
+  if (!src) return;
   const image = new window.Image();
-  image.src = getResourceImage(fileName);
+  image.src = src;
 }
 
 function getRandomRewardPosition() {
@@ -158,9 +176,9 @@ export default function TapTapPandaPage() {
   }, []);
 
   useEffect(() => {
-    if (!preparedRewardPreview?.fileName) return;
-    preloadRewardImage(preparedRewardPreview.fileName);
-  }, [preparedRewardPreview?.fileName]);
+    if (!preparedRewardPreview?.imageUrl && !preparedRewardPreview?.fileName) return;
+    preloadRewardImage(preparedRewardPreview);
+  }, [preparedRewardPreview?.imageUrl, preparedRewardPreview?.fileName]);
 
   const expireAtMs = new Date(session?.account?.expireAt || 0).getTime();
   const coolDownUntilMs = new Date(
@@ -300,7 +318,7 @@ export default function TapTapPandaPage() {
       applyTapResponse(data);
 
       if (data?.reward) {
-        preloadRewardImage(data.reward?.fileName);
+        preloadRewardImage(data.reward);
         setRewardPosition(preparedRewardPosition);
         setPreparedRewardPosition(getRandomRewardPosition());
         setReward(data.reward);
@@ -649,8 +667,10 @@ export default function TapTapPandaPage() {
               {displayResources.length > 0 ? (
                 displayResources.map((item) => (
                   <ResourceChip
-                    key={`${item.name}-${item.fileName}`}
+                    key={item.resourceId || `${item.name}-${item.fileName}-${item.imageUrl || ""}`}
+                    name={item.name}
                     fileName={item.fileName}
+                    imageUrl={item.imageUrl}
                     stock={item.stock}
                   />
                 ))
@@ -809,11 +829,12 @@ function RewardModal({ reward, onCollect, claiming, position }) {
             <div className="grid w-full place-items-center rounded-[14px] border border-white/10 bg-white/5 px-3 py-3">
               <div className="relative h-[92px] w-[92px]">
                 <Image
-                  src={getResourceImage(reward.fileName)}
+                  src={getResourceImage(reward)}
                   alt={reward.resourceName}
                   fill
                   className="object-contain drop-shadow-[0_24px_60px_rgba(0,0,0,.55)]"
                   priority
+                  unoptimized={isRemoteImage(getResourceImage(reward))}
                 />
               </div>
 
@@ -878,15 +899,16 @@ function CooldownModal({ time }) {
   );
 }
 
-function ResourceChip({ fileName, stock }) {
+function ResourceChip({ name, fileName, imageUrl, stock }) {
   return (
     <span className="inline-flex min-w-[58px] flex-col items-center justify-center gap-1 rounded-[14px] border border-white/10 bg-white/5 px-3 py-2">
       <span className="relative h-9 w-9 shrink-0">
         <Image
-          src={getResourceImage(fileName)}
-          alt="Resource"
+          src={getResourceImage({ imageUrl, fileName })}
+          alt={name || "Resource"}
           fill
           className="object-contain"
+          unoptimized={isRemoteImage(getResourceImage({ imageUrl, fileName }))}
         />
       </span>
       <span className="text-sm font-bold tabular-nums text-white/90">

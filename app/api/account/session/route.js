@@ -1,68 +1,78 @@
-import { NextResponse } from "next/server";
-import dbConnect from "@/lib/dbConnect";
-import MyResource from "@/models/MyResource";
+import { NextResponse } from "next/server"
+import dbConnect from "@/lib/dbConnect"
+import MyResource from "@/models/MyResource"
 import {
   buildAuthErrorResponse,
   getAuthenticatedAccount,
   getTapSyncMeta,
   syncAccountProgress,
-} from "@/lib/accountAuth";
+} from "@/lib/accountAuth"
+import { getResourceKey, serializeResourceItem } from "@/lib/resourcePayload"
 
 export async function GET(req) {
   try {
-    await dbConnect();
+    await dbConnect()
 
     const auth = await getAuthenticatedAccount(
       req,
       "ownerId username packageName clickCount expireAt resources activity status",
-    );
+    )
 
     if (!auth.ok) {
-      return buildAuthErrorResponse(auth);
+      return buildAuthErrorResponse(auth)
     }
 
-    const account = auth.account;
-    const sync = syncAccountProgress(account);
+    const account = auth.account
+    const sync = syncAccountProgress(account)
 
     if (sync.changed) {
-      await account.save();
+      await account.save()
     }
 
-    const tapMeta = getTapSyncMeta(account);
+    const tapMeta = getTapSyncMeta(account)
 
     const myResourceDoc = await MyResource.findOne({ userId: account.ownerId })
       .select("resources")
-      .lean();
+      .lean()
 
-    const collectedMap = new Map();
+    const collectedMap = new Map()
 
     if (Array.isArray(myResourceDoc?.resources)) {
       for (const item of myResourceDoc.resources) {
-        const key = String(item?.name || "").trim().toLowerCase();
-        if (!key) continue;
-
-        collectedMap.set(key, {
-          name: item.name,
-          fileName: item.fileName || "",
-          stock: Number(item.stock || 0),
-        });
+        const normalized = serializeResourceItem(item, {
+          stock: Number(item?.stock || 0),
+        })
+        const key = getResourceKey(item)
+        if (!key) continue
+        collectedMap.set(key, normalized)
       }
     }
 
     const resourceList = Array.isArray(account.resources)
       ? account.resources.map((item) => {
-          const key = String(item?.resourceName || "").trim().toLowerCase();
-          const matched = collectedMap.get(key);
+          const primaryKey = getResourceKey(item)
+          const fallbackKey = item?.resourceName
+            ? `name:${String(item.resourceName).trim().toLowerCase()}`
+            : ""
+          const matched =
+            collectedMap.get(primaryKey) ||
+            (fallbackKey ? collectedMap.get(fallbackKey) : null)
 
-          return {
-            name: item.resourceName,
-            fileName: matched?.fileName || item.fileName || "",
-            stock: Number(matched?.stock || 0),
-            totalQuantity: Number(item.quantity || 0),
-            claimedQuantity: Number(item.claimedQuantity || 0),
-          };
+          return serializeResourceItem(
+            {
+              resourceId: item?.resourceId || matched?.resourceId || null,
+              resourceName: item?.resourceName || matched?.resourceName || matched?.name || "",
+              fileName: item?.fileName || matched?.fileName || "",
+              imageUrl: item?.imageUrl || matched?.imageUrl || "",
+            },
+            {
+              stock: Number(matched?.stock || 0),
+              totalQuantity: Number(item?.quantity || 0),
+              claimedQuantity: Number(item?.claimedQuantity || 0),
+            },
+          )
         })
-      : [];
+      : []
 
     return NextResponse.json(
       {
@@ -91,11 +101,11 @@ export async function GET(req) {
         resources: resourceList,
       },
       { status: 200 },
-    );
+    )
   } catch {
     return NextResponse.json(
       { message: "Internal server error." },
       { status: 500 },
-    );
+    )
   }
 }

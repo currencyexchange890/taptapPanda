@@ -2,12 +2,22 @@ import mongoose from "mongoose"
 
 const MyResourceItemSchema = new mongoose.Schema(
   {
+    resourceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Resource",
+      default: null,
+    },
     name: {
       type: String,
       required: true,
       trim: true,
     },
     fileName: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    imageUrl: {
       type: String,
       default: "",
       trim: true,
