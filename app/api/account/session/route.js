@@ -61,7 +61,8 @@ export async function GET(req) {
           return serializeResourceItem(
             {
               resourceId: item?.resourceId || matched?.resourceId || null,
-              resourceName: item?.resourceName || matched?.resourceName || matched?.name || "",
+              resourceName:
+                item?.resourceName || matched?.resourceName || matched?.name || "",
               fileName: item?.fileName || matched?.fileName || "",
               imageUrl: item?.imageUrl || matched?.imageUrl || "",
             },
@@ -97,7 +98,11 @@ export async function GET(req) {
           completed: sync.completed,
           nextRewardTap: tapMeta.nextRewardTap,
           nextSyncTap: tapMeta.nextSyncTap,
+          nextReward: tapMeta.nextReward,
+          rewardPreview: tapMeta.nextReward,
         },
+        nextReward: tapMeta.nextReward,
+        rewardPreview: tapMeta.nextReward,
         resources: resourceList,
       },
       { status: 200 },

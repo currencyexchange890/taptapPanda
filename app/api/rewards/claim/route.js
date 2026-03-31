@@ -64,6 +64,18 @@ export async function POST(req) {
     }
 
     const drop = drops[targetIndex]
+    const currentCycle = Number(account.activity?.progress?.currentCycle || 1)
+    const currentTapInCycle = Number(account.activity?.progress?.currentTapInCycle || 0)
+    const rewardUnlocked =
+      currentCycle > cycleNumber ||
+      (currentCycle === cycleNumber && currentTapInCycle >= tapNumber)
+
+    if (!rewardUnlocked) {
+      return NextResponse.json(
+        { message: "This reward is still syncing. Please tap again." },
+        { status: 409 }
+      )
+    }
 
     if (drop.claim) {
       return NextResponse.json(

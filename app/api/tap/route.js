@@ -27,6 +27,8 @@ function buildTapPayload(account, reward = null, extra = {}) {
         Number(account.activity?.tapsPerCycle || 1),
     nextRewardTap: meta.nextRewardTap,
     nextSyncTap: meta.nextSyncTap,
+    nextReward: meta.nextReward,
+    rewardPreview: meta.nextReward,
     reward,
     ...extra,
   }

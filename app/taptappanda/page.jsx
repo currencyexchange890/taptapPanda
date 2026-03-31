@@ -22,9 +22,6 @@ function formatDuration(ms) {
   )}:${String(seconds).padStart(2, "0")}`;
 }
 
-function isRemoteImage(src) {
-  return typeof src === "string" && /^https?:\/\//i.test(src.trim());
-}
 
 function getResourceImage(resource) {
   const imageUrl =
@@ -61,6 +58,27 @@ function preloadRewardImage(resource) {
   image.src = src;
 }
 
+function isSameReward(first, second) {
+  if (!first || !second) return false;
+
+  return (
+    Number(first?.cycleNumber || 0) === Number(second?.cycleNumber || 0) &&
+    Number(first?.tapNumber || 0) === Number(second?.tapNumber || 0)
+  );
+}
+
+function isRewardUnlocked(activity, reward) {
+  const currentCycle = Number(activity?.currentCycle || 0);
+  const currentTapInCycle = Number(activity?.currentTapInCycle || 0);
+  const rewardCycle = Number(reward?.cycleNumber || 0);
+  const rewardTap = Number(reward?.tapNumber || 0);
+
+  return (
+    currentCycle > rewardCycle ||
+    (currentCycle === rewardCycle && currentTapInCycle >= rewardTap)
+  );
+}
+
 function getRandomRewardPosition() {
   if (typeof window === "undefined") {
     return { top: 112, left: 16 };
@@ -92,6 +110,7 @@ export default function TapTapPandaPage() {
   const wrapRef = useRef(null);
   const nextId = useRef(1);
   const cooldownRef = useRef(null);
+  const activeTapSyncRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -132,6 +151,7 @@ export default function TapTapPandaPage() {
       ...prev,
       account: {
         ...prev?.account,
+        clickCount: data?.tapCount ?? prev?.account?.clickCount ?? 0,
         tapCount: data?.tapCount ?? prev?.account?.tapCount ?? 0,
       },
       activity: {
@@ -163,6 +183,16 @@ export default function TapTapPandaPage() {
     setNextSyncTap(Number(data?.nextSyncTap || data?.tapsPerCycle || 1));
     setPreparedRewardPreview(resolveUpcomingRewardPreview(data));
     setHasPendingSync(false);
+  };
+
+  const openRewardModal = (nextReward, position = preparedRewardPosition) => {
+    if (!nextReward) return;
+
+    preloadRewardImage(nextReward);
+    setRewardPosition(position);
+    setPreparedRewardPosition(getRandomRewardPosition());
+    setReward(nextReward);
+    setModalOpen(true);
   };
 
   useEffect(() => {
@@ -257,6 +287,7 @@ export default function TapTapPandaPage() {
     targetTapInCycle = liveCurrentTapInCycle,
     keepalive = false,
     silent = false,
+    allowWhileModalOpen = false,
   } = {}) => {
     if (!session) return false;
 
@@ -268,74 +299,91 @@ export default function TapTapPandaPage() {
       return false;
     }
 
-    if (!keepalive) {
-      if (syncing) return false;
-      setSyncing(true);
+    if (!keepalive && activeTapSyncRef.current) {
+      return activeTapSyncRef.current;
     }
 
-    try {
-      const res = await fetch("/api/tap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        keepalive,
-        body: JSON.stringify({
-          currentCycle: targetCycle,
-          targetTapInCycle,
-        }),
-      });
-
-      if (keepalive) {
-        return true;
+    const runRequest = async () => {
+      if (!keepalive) {
+        if (modalOpen && !allowWhileModalOpen) return false;
+        setSyncing(true);
       }
 
-      const data = await res.json().catch(() => ({}));
+      try {
+        const res = await fetch("/api/tap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          keepalive,
+          body: JSON.stringify({
+            currentCycle: targetCycle,
+            targetTapInCycle,
+          }),
+        });
 
-      if (res.status === 401 || res.status === 403) {
-        if (data?.completed) {
-          applyTapResponse(data);
-          toast.error(data?.message || "All tap cycles are completed.");
+        if (keepalive) {
+          return true;
+        }
+
+        const data = await res.json().catch(() => ({}));
+
+        if (res.status === 401 || res.status === 403) {
+          if (data?.completed) {
+            applyTapResponse(data);
+            toast.error(data?.message || "All tap cycles are completed.");
+            return false;
+          }
+
+          toast.error(data?.message || "Session expired.");
+          router.replace("/signin");
           return false;
         }
 
-        toast.error(data?.message || "Session expired.");
-        router.replace("/signin");
-        return false;
-      }
+        if (res.status === 429) {
+          applyTapResponse(data);
+          return false;
+        }
 
-      if (res.status === 429) {
+        if (!res.ok) {
+          if (!silent) {
+            toast.error(data?.message || "Tap sync failed.");
+          }
+          return false;
+        }
+
         applyTapResponse(data);
-        return false;
-      }
 
-      if (!res.ok) {
-        if (!silent) {
-          toast.error(data?.message || "Tap sync failed.");
+        if (data?.reward) {
+          const responseReward = data.reward;
+          const hasSameOpenReward = modalOpen && isSameReward(reward, responseReward);
+
+          if (!hasSameOpenReward) {
+            openRewardModal(responseReward);
+          }
+        }
+
+        return true;
+      } catch {
+        if (!keepalive && !silent) {
+          toast.error("Network error. Please try again.");
         }
         return false;
+      } finally {
+        if (!keepalive) {
+          setSyncing(false);
+        }
       }
+    };
 
-      applyTapResponse(data);
-
-      if (data?.reward) {
-        preloadRewardImage(data.reward);
-        setRewardPosition(preparedRewardPosition);
-        setPreparedRewardPosition(getRandomRewardPosition());
-        setReward(data.reward);
-        setModalOpen(true);
-      }
-
-      return true;
-    } catch {
-      if (!keepalive && !silent) {
-        toast.error("Network error. Please try again.");
-      }
-      return false;
-    } finally {
-      if (!keepalive) {
-        setSyncing(false);
-      }
+    if (keepalive) {
+      return runRequest();
     }
+
+    activeTapSyncRef.current = runRequest().finally(() => {
+      activeTapSyncRef.current = null;
+    });
+
+    return activeTapSyncRef.current;
   };
 
   useEffect(() => {
@@ -467,13 +515,30 @@ export default function TapTapPandaPage() {
         1,
         Number(session?.activity?.tapsPerCycle || 1),
       );
+      const nextRewardTap = Number(session?.activity?.nextRewardTap || 0);
       const nextTapCount = liveTapCount + 1;
       const nextTapInCycle = Math.min(tapsPerCycle, liveCurrentTapInCycle + 1);
       const syncBoundary = Math.max(1, Number(nextSyncTap || tapsPerCycle));
+      const preparedRewardReady =
+        nextRewardTap > 0 &&
+        nextTapInCycle === nextRewardTap &&
+        Number(preparedRewardPreview?.cycleNumber || 0) === liveCurrentCycle &&
+        Number(preparedRewardPreview?.tapNumber || 0) === nextRewardTap;
 
       setLiveTapCount(nextTapCount);
       setLiveCurrentTapInCycle(nextTapInCycle);
       setHasPendingSync(true);
+
+      if (preparedRewardReady) {
+        openRewardModal(preparedRewardPreview);
+        void flushTapProgress({
+          targetCycle: liveCurrentCycle,
+          targetTapInCycle: nextTapInCycle,
+          silent: true,
+          allowWhileModalOpen: true,
+        });
+        return;
+      }
 
       if (nextTapInCycle >= syncBoundary || nextTapInCycle >= tapsPerCycle) {
         await flushTapProgress({
@@ -492,6 +557,19 @@ export default function TapTapPandaPage() {
 
     try {
       setClaiming(true);
+
+      if (activeTapSyncRef.current) {
+        await activeTapSyncRef.current;
+      }
+
+      if (!isRewardUnlocked(session?.activity, reward) || hasPendingSync) {
+        await flushTapProgress({
+          targetCycle: Number(reward?.cycleNumber || liveCurrentCycle),
+          targetTapInCycle: Number(reward?.tapNumber || liveCurrentTapInCycle),
+          silent: true,
+          allowWhileModalOpen: true,
+        });
+      }
 
       const res = await fetch("/api/rewards/claim", {
         method: "POST",
@@ -718,6 +796,7 @@ export default function TapTapPandaPage() {
                         src="/assets/images/panda1.png"
                         alt="Panda"
                         fill
+                        sizes="176px"
                         className="object-contain"
                         priority
                       />
@@ -832,9 +911,9 @@ function RewardModal({ reward, onCollect, claiming, position }) {
                   src={getResourceImage(reward)}
                   alt={reward.resourceName}
                   fill
+                  sizes="92px"
                   className="object-contain drop-shadow-[0_24px_60px_rgba(0,0,0,.55)]"
                   priority
-                  unoptimized={isRemoteImage(getResourceImage(reward))}
                 />
               </div>
 
@@ -907,8 +986,8 @@ function ResourceChip({ name, fileName, imageUrl, stock }) {
           src={getResourceImage({ imageUrl, fileName })}
           alt={name || "Resource"}
           fill
+          sizes="36px"
           className="object-contain"
-          unoptimized={isRemoteImage(getResourceImage({ imageUrl, fileName }))}
         />
       </span>
       <span className="text-sm font-bold tabular-nums text-white/90">
@@ -926,6 +1005,7 @@ function ZeroResourceChip() {
           src="/assets/images/silver.png"
           alt="Resource"
           fill
+          sizes="36px"
           className="object-contain opacity-60"
         />
       </span>
